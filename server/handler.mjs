@@ -1,7 +1,7 @@
 import {settingsAction} from './commercial-settings.mjs';
 import {financeList,financeSave} from './commercial-finance.mjs';
 import {maintenanceAction} from './maintenance.mjs';
-import {createOperator,changeOperatorPassword,overviewUsage} from './commercial-operators.mjs';
+import {createOperator,changeOperatorPassword,overviewUsage,listOperators} from './commercial-operators.mjs';
 import {billingAction} from './commercial-billing.mjs';
 import {reconcilePlanNotifications} from './plan-notifications.mjs';
 import {profileGet,profileSave} from './operator-profile.mjs';
@@ -21,6 +21,7 @@ export function createHandler({services,env=process.env,now=()=>new Date()}){ret
  if(action==='settings'&&req.method==='GET')return res.status(200).json(await settingsAction(db,null,user,env));
  if(action==='finance'&&req.method==='GET')return res.status(200).json(await financeList(db));
  if(action==='maintenance'&&req.method==='GET')return res.status(200).json(await maintenanceAction(db,null,user));
+ if(action==='operator-create'&&req.method==='GET')return res.status(200).json(await listOperators(db,user,env));
  if(action==='operator-access'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json({mustChangePassword:user.mustChangePassword===true});}
  if(['operator-password','operator-create','billing','maintenance','finance','settings'].includes(action)){if(req.method!=='POST')fail(405,'Método não permitido.');requireOrigin(req,env);if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Formato inválido.');let b=req.body;if(typeof b==='string'){if(Buffer.byteLength(b)>20000)fail(413,'Pedido muito grande.');try{b=JSON.parse(b);}catch{fail(400,'Dados inválidos.');}}if(!b||Buffer.byteLength(JSON.stringify(b))>20000)fail(400,'Dados inválidos.');const result=action==='settings'?await settingsAction(db,b,user,env):action==='finance'?await financeSave(db,b,user):action==='maintenance'?await maintenanceAction(db,b,user):action==='operator-password'?await changeOperatorPassword(db,auth,b,user):action==='operator-create'?await createOperator(db,auth,b,user,env):await billingAction(db,b,user,env);return res.status(200).json(result);}
  if(action==='overview-usage'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json(await overviewUsage(db));}
