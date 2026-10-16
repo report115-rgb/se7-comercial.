@@ -1,3 +1,6 @@
+import {maintenanceAction} from './maintenance.mjs';
+import {createOperator,changeOperatorPassword,overviewUsage} from './commercial-operators.mjs';
+import {billingAction} from './commercial-billing.mjs';
 import {reconcilePlanNotifications} from './plan-notifications.mjs';
 import {profileGet,profileSave} from './operator-profile.mjs';
 import {changeDetails} from './audit-details.mjs';
@@ -10,16 +13,20 @@ export function createHandler({services,env=process.env,now=()=>new Date()}){ret
  const action=new URL(req.url,'https://commercial.invalid').searchParams.get('action')||'state';
  if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Método não permitido.'});
  if(action==='config'&&req.method==='GET'){if(!env.COMMERCIAL_FIREBASE_API_KEY||!env.COMMERCIAL_FIREBASE_PROJECT_ID||!env.COMMERCIAL_OWNER_UID)fail(503,'O painel ainda precisa ser configurado na Vercel.');return res.status(200).json({apiKey:env.COMMERCIAL_FIREBASE_API_KEY,projectId:env.COMMERCIAL_FIREBASE_PROJECT_ID});}
- if(action==='logout'&&req.method==='POST'){requireOrigin(req,env);clearSession(res);return res.status(200).json({ok:true});}if(!['state','session','cep','profile','notifications'].includes(action))fail(404,'Operação não encontrada.');
+ if(action==='logout'&&req.method==='POST'){requireOrigin(req,env);clearSession(res);return res.status(200).json({ok:true});}if(!['state','session','cep','profile','notifications','overview-usage','operator-access','operator-password','operator-create','billing','maintenance'].includes(action))fail(404,'Operação não encontrada.');
  if(!env.COMMERCIAL_OWNER_UID)fail(503,'Configure o administrador comercial.');
- if(!bearer(req)&&!sessionCookie(req))fail(401,'Entre com sua conta do painel comercial.');const {auth,db}=services();if(action==='session'){if(req.method!=='POST')fail(405,'Método não permitido.');return res.status(200).json(await establish(auth,req,res,env,now()));}const user=await identify(auth,req,env);
+ if(!bearer(req)&&!sessionCookie(req))fail(401,'Entre com sua conta do painel comercial.');const {auth,db}=services();if(action==='session'){if(req.method!=='POST')fail(405,'Método não permitido.');return res.status(200).json(await establish(auth,req,res,env,now(),db));}const user=await identify(auth,req,env,db,['operator-access','operator-password'].includes(action));
+ if(action==='maintenance'&&req.method==='GET')return res.status(200).json(await maintenanceAction(db,null,user));
+ if(action==='operator-access'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json({mustChangePassword:user.mustChangePassword===true});}
+ if(['operator-password','operator-create','billing','maintenance'].includes(action)){if(req.method!=='POST')fail(405,'Método não permitido.');requireOrigin(req,env);if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Formato inválido.');let b=req.body;if(typeof b==='string'){if(Buffer.byteLength(b)>20000)fail(413,'Pedido muito grande.');try{b=JSON.parse(b);}catch{fail(400,'Dados inválidos.');}}if(!b||Buffer.byteLength(JSON.stringify(b))>20000)fail(400,'Dados inválidos.');const result=action==='maintenance'?await maintenanceAction(db,b,user):action==='operator-password'?await changeOperatorPassword(db,auth,b,user):action==='operator-create'?await createOperator(db,auth,b,user,env):await billingAction(db,b,user,env);return res.status(200).json(result);}
+ if(action==='overview-usage'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json(await overviewUsage(db));}
  if(action==='notifications'){if(req.method!=='GET')fail(405,'Método não permitido.');const n=await db.collection('commercialPrivate').doc('notifications').get();return res.status(200).json({entries:Object.values(n.data()?.entries||{}),updatedAt:n.data()?.updatedAt||null});}
  if(action==='profile'){if(req.method==='GET')return res.status(200).json({profile:await profileGet(db,user,env)});requireOrigin(req,env);if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Formato inválido.');let b=req.body;if(typeof b==='string'){if(Buffer.byteLength(b)>180000)fail(413,'Perfil muito grande.');try{b=JSON.parse(b);}catch{fail(400,'Dados inválidos.');}}if(!b||Buffer.byteLength(JSON.stringify(b))>180000)fail(413,'Perfil muito grande.');return res.status(200).json({profile:await profileSave(db,user,env,b)});}
  if(action==='cep'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json(await lookupCep(new URL(req.url,'https://commercial.invalid').searchParams.get('cep')));}
  const ref=db.collection('commercialPrivate').doc('catalog');
  if(req.method==='GET'){
   let doc=await ref.get();if(!doc.exists){await db.runTransaction(async tx=>{const current=await tx.get(ref);if(!current.exists)tx.create(ref,{...seed(now()),revision:0,updatedAt:now().toISOString(),history:[]});});doc=await ref.get();}
-  const currentProfile=await db.collection('commercialProfiles').doc(user.uid).get();return res.status(200).json({state:doc.data(),user:{uid:user.uid,name:currentProfile.data()?.name||user.name||env.COMMERCIAL_OWNER_NAME||'Administrador',email:user.email||''},connection:{applicationsConnected:false,billingConnected:false}});
+  const currentProfile=await db.collection('commercialProfiles').doc(user.uid).get();return res.status(200).json({state:doc.data(),user:{uid:user.uid,name:currentProfile.data()?.name||user.name||env.COMMERCIAL_OWNER_NAME||'Administrador',email:user.email||'',commercialRole:user.commercialRole},connection:{applicationsConnected:false,billingConnected:false}});
  }
  requireOrigin(req,env);
  if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Envie dados em formato JSON.');

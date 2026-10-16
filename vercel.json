@@ -10,6 +10,10 @@
     "api/unified.js": {
       "maxDuration": 30,
       "includeFiles": "server/**"
+    },
+    "api/asaas-commercial-webhook.js": {
+      "maxDuration": 30,
+      "includeFiles": "server/**"
     }
   },
   "headers": [
