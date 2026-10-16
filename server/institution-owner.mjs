@@ -19,7 +19,7 @@ export async function createInstitutionOwner(db,auth,b,actor){
  const at=new Date().toISOString();
  tx.create(ownerRef,{uid:account.uid,email,name,createdAt:at,createdBy:actor.uid});
  tx.create(db.collection('academicUsers').doc(account.uid),{institutionId:b.institutionId,role:'master',name,email,enabled:true,mustChangePassword:true,createdAt:at});
- tx.create(db.collection('commercialAudit').doc(),{at,actor:actor.email||actor.uid,actorUid:actor.uid,message:'Preparou acesso Master da instituição '+institution.name+' para '+email});
+ tx.create(db.collection('commercialAudit').doc(),{at,actor:actor.email||actor.uid,actorUid:actor.uid,actorName:actor.name||'Administrador comercial',actorEmail:actor.email||'',message:'Preparou acesso Master da instituição '+institution.name+' para '+email});
  });}catch(e){await auth.deleteUser(account.uid);throw e;}
  return {email,name,temporaryPassword:password};
 }
