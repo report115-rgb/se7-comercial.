@@ -1,3 +1,4 @@
+import {lookupCep} from './cep.mjs';
 import {identify,establish,clearSession,requireOrigin,bearer,sessionCookie} from './commercial-session.mjs';
 import {seed,validate,fail,changeSummary} from './model.mjs';
 export function createHandler({services,env=process.env,now=()=>new Date()}){return async function handler(req,res){
@@ -6,9 +7,10 @@ export function createHandler({services,env=process.env,now=()=>new Date()}){ret
  const action=new URL(req.url,'https://commercial.invalid').searchParams.get('action')||'state';
  if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Método não permitido.'});
  if(action==='config'&&req.method==='GET'){if(!env.COMMERCIAL_FIREBASE_API_KEY||!env.COMMERCIAL_FIREBASE_PROJECT_ID||!env.COMMERCIAL_OWNER_UID)fail(503,'O painel ainda precisa ser configurado na Vercel.');return res.status(200).json({apiKey:env.COMMERCIAL_FIREBASE_API_KEY,projectId:env.COMMERCIAL_FIREBASE_PROJECT_ID});}
- if(action==='logout'&&req.method==='POST'){requireOrigin(req,env);clearSession(res);return res.status(200).json({ok:true});}if(!['state','session'].includes(action))fail(404,'Operação não encontrada.');
+ if(action==='logout'&&req.method==='POST'){requireOrigin(req,env);clearSession(res);return res.status(200).json({ok:true});}if(!['state','session','cep'].includes(action))fail(404,'Operação não encontrada.');
  if(!env.COMMERCIAL_OWNER_UID)fail(503,'Configure o administrador comercial.');
  if(!bearer(req)&&!sessionCookie(req))fail(401,'Entre com sua conta do painel comercial.');const {auth,db}=services();if(action==='session'){if(req.method!=='POST')fail(405,'Método não permitido.');return res.status(200).json(await establish(auth,req,res,env,now()));}const user=await identify(auth,req,env);
+ if(action==='cep'){if(req.method!=='GET')fail(405,'Método não permitido.');return res.status(200).json(await lookupCep(new URL(req.url,'https://commercial.invalid').searchParams.get('cep')));}
  const ref=db.collection('commercialPrivate').doc('catalog');
  if(req.method==='GET'){
   let doc=await ref.get();if(!doc.exists){await db.runTransaction(async tx=>{const current=await tx.get(ref);if(!current.exists)tx.create(ref,{...seed(now()),revision:0,updatedAt:now().toISOString(),history:[]});});doc=await ref.get();}
